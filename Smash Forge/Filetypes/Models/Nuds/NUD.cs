@@ -17,6 +17,8 @@ using SFGenericModel.Materials;
 using SmashForge.Filetypes.Models.Nuds;
 using SmashForge.Rendering;
 using SmashForge.Rendering.Lights;
+using System.Configuration;
+using System.Diagnostics;
 
 namespace SmashForge
 {
@@ -1182,7 +1184,12 @@ namespace SmashForge
         public override byte[] Rebuild()
         {
             FileOutput d = new FileOutput(); // data
-            d.endian = Endianness.Big;
+
+            //for wmmt 6
+            //d.endian = Endianness.Big; //original
+            d.endian = Endianness.Little;
+            Endian = Endianness.Little;
+            //
             if (Endian == Endianness.Big)
                 d.WriteString("NDP3");
             else if (Endian == Endianness.Little)
@@ -1302,9 +1309,12 @@ namespace SmashForge
                     obj.WriteInt(0);
                     obj.WriteInt(0);
 
-                    // Write the poly...
-                    foreach (int face in p.vertexIndices)
-                        poly.WriteShort(face);
+                    //for wmmt 6
+                    //// Write the poly...
+                    //foreach (int face in p.vertexIndices)
+                    //    poly.WriteShort(face);
+                    ConvertVertexIndices(p, poly);
+                    //
 
                     // Write the vertex....
                     if (p.boneType > 0)
@@ -1320,6 +1330,12 @@ namespace SmashForge
                     {
                         foreach (Vertex v in p.vertices)
                         {
+                            //for wmmt 6
+                            v.color.X = 0xFF;
+                            v.color.Y = 0xFF;
+                            v.color.Z = 0xFF;
+                            v.color.W = 0xFF;
+                            //
                             WriteVertex(vert, p, v);
                             WriteUV(vert, p, v);
                         }
@@ -1540,21 +1556,32 @@ namespace SmashForge
             foreach (Material mat in materials)
             {
                 offs[c++] = d.Size();
-                d.WriteInt((int)mat.Flags);
+
+                //for wmmt6
+                //d.WriteInt((int)mat.Flags); //original
+                d.WriteByte(0x9); //the tex type, can be 0, 5, 8, 9, 0xA
+                d.WriteByte(0x0);
+                d.WriteByte(0x0);
+                d.WriteByte(0x10);
+                //
                 d.WriteInt(0); // padding
                 d.WriteShort(mat.SrcFactor);
                 d.WriteShort(mat.textures.Count);
                 d.WriteShort(mat.DstFactor);
                 d.WriteShort(mat.AlphaFunc);
                 d.WriteShort(mat.RefAlpha);
-                d.WriteShort(mat.CullMode);
+
+                //for wmmt6
+                //d.WriteShort(mat.CullMode); //original
+                d.WriteShort(2);  //idk why is 2
+                //
                 d.WriteInt(0); // unknown
                 d.WriteInt(mat.Unk2);
                 d.WriteInt(mat.ZBufferOffset);
 
                 foreach (MatTexture tex in mat.textures)
                 {
-                    d.WriteInt(tex.hash);
+                    d.WriteInt(tex.hash); // the tex name, can set in ui
                     d.WriteInt(0);
                     d.WriteShort(0);
                     d.WriteShort(tex.mapMode);
@@ -1562,41 +1589,52 @@ namespace SmashForge
                     d.WriteByte(tex.wrapModeT);
                     d.WriteByte(tex.minFilter);
                     d.WriteByte(tex.magFilter);
-                    d.WriteByte(tex.mipDetail);
+
+                    //for wmmt6
+                    //d.WriteByte(tex.mipDetail); //original
+                    d.WriteByte(2); //idk why is 2
+                    //
                     d.WriteByte(tex.unknown);
                     d.WriteInt(0); // padding
                     d.WriteShort(tex.unknown2);
                 }
 
+                //for wmmt 6
                 //If there are no material attributes, write a "blank" entry
-                if (mat.PropertyCount == 0)
-                {
-                    d.WriteInt(0);
-                    d.WriteInt(0);
-                    d.WriteInt(0);
-                    d.WriteInt(0);
-                }
+                //if (mat.PropertyCount == 0)
+                //{
+                //    d.WriteInt(0);
+                //    d.WriteInt(0);
+                //    d.WriteInt(0);
+                //    d.WriteInt(0);
+                //}
+                d.WriteInt(0);
+                d.WriteInt(0);
+                d.WriteInt(0);
+                d.WriteInt(0);
+                //
 
-                for (int i = 0; i < mat.PropertyCount; i++)
-                {
-                    //It can be seen in Pokkén NDWD that the last material attribute name
-                    // does not need to be aligned to 16. So, we do the alignment before writing
-                    // the name rather than after.
-                    str.Align(16);
+                //for wmmt6 hidden below
+                //for (int i = 0; i < mat.PropertyCount; i++)
+                //{
+                //    //It can be seen in Pokkén NDWD that the last material attribute name
+                //    // does not need to be aligned to 16. So, we do the alignment before writing
+                //    // the name rather than after.
+                //    str.Align(16);
 
-                    float[] data = mat.GetPropertyValues(mat.PropertyNames.ElementAt(i));
-                    d.WriteInt(i == mat.PropertyCount - 1 ? 0 : 16 + 4 * data.Length);
-                    d.WriteInt(str.Size());
+                //    float[] data = mat.GetPropertyValues(mat.PropertyNames.ElementAt(i));
+                //    d.WriteInt(i == mat.PropertyCount - 1 ? 0 : 16 + 4 * data.Length);
+                //    d.WriteInt(str.Size());
 
-                    str.WriteString(mat.PropertyNames.ElementAt(i));
-                    str.WriteByte(0);
+                //    str.WriteString(mat.PropertyNames.ElementAt(i));
+                //    str.WriteByte(0);
 
-                    d.WriteByte(0); d.WriteByte(0); d.WriteByte(0);
-                    d.WriteByte((byte)data.Length);
-                    d.WriteInt(0);
-                    foreach (float f in data)
-                        d.WriteFloat(f);
-                }
+                //    d.WriteByte(0); d.WriteByte(0); d.WriteByte(0);
+                //    d.WriteByte((byte)data.Length);
+                //    d.WriteInt(0);
+                //    foreach (float f in data)
+                //        d.WriteFloat(f);
+                //}
             }
             return offs;
         }
@@ -1831,6 +1869,185 @@ namespace SmashForge
                         if(!texIds.Contains(mat.displayTexId))
                             texIds.Add(mat.displayTexId);
             return texIds;
+        }
+
+        public void ConvertVertexIndices(Polygon p, FileOutput poly)
+        {
+            // Convert the vertex indices
+            // by descatal
+
+            CopyScrpitExeToHelperFolder();
+            CreateInputPrimitiveTriangles(p);
+
+            string inputPath = Path.Combine(Environment.CurrentDirectory, "Helpers", "inputPrimitiveTriangles.txt");
+            string outputPath = Path.Combine(Environment.CurrentDirectory, "Helpers", "outputPrimitiveTriangleStrips.txt");
+
+
+            //if (triangularsPrimitiveIndex.Count() > 0x030000)
+            //    throw new Exception("Cannot convert Strips with more than 196608 verts!");
+
+            // writing into input txt
+            StringBuilder lineStr = new StringBuilder();
+            StringBuilder baseStr = new StringBuilder();
+            int count = 1;
+            foreach (uint value in p.vertexIndices)
+            {
+                if (value > 0xFFFF)
+                    throw new Exception("Debug");
+
+                if (count <= 3)
+                {
+                    lineStr.Append(value);
+                    lineStr.Append(" ");
+                }
+                else
+                {
+                    count = 1;
+                    baseStr.AppendLine(lineStr.ToString());
+                    lineStr = new StringBuilder();
+                    lineStr.Append(value);
+                    lineStr.Append(" ");
+                }
+                count++;
+            }
+
+            baseStr.AppendLine(lineStr.ToString());
+            // 确保目录存在，如果不存在则创建
+            string directoryPath = Path.GetDirectoryName(inputPath);
+            if (!Directory.Exists(directoryPath))
+            {
+                Directory.CreateDirectory(directoryPath);
+            }
+            // 检查文件是否存在，如果不存在则创建并写入内容
+            using (TextWriter writer = new StreamWriter(inputPath, false))
+            {
+                writer.Write(baseStr.ToString());
+            }
+
+            // using converter
+            string arg = inputPath + " -i " + outputPath + " -o";
+            using (Process strips = new Process())
+            {
+                strips.StartInfo.WorkingDirectory = "Helpers/";
+                strips.StartInfo.FileName = "Helpers/" + "Strips.exe";
+                strips.StartInfo.UseShellExecute = false;
+                strips.StartInfo.RedirectStandardInput = true;
+                strips.StartInfo.RedirectStandardOutput = true;
+                strips.StartInfo.CreateNoWindow = false;
+                strips.Start();
+                strips.StandardInput.WriteLine(arg);
+                string output = strips.StandardOutput.ReadToEnd();
+                strips.WaitForExit();
+            }
+
+            List<ushort> triStripPrimitives = new List<ushort>();
+            StreamReader sr = new StreamReader(outputPath);
+
+            string fline = sr.ReadLine();
+            if (fline != null)
+            {
+                int stripNo;
+                int.TryParse(fline.Split(':')[1], out stripNo);
+
+                string line = sr.ReadLine();
+                while (line != null)
+                {
+                    string[] spilt = line.Split(' ').Skip(2).ToArray();
+                    foreach (string primitive in spilt)
+                    {
+                        ushort res;
+                        ushort.TryParse(primitive, out res);
+                        triStripPrimitives.Add(res);
+                    }
+                    line = sr.ReadLine();
+                    if (line != null) // Checks if end 
+                    {
+                        triStripPrimitives.Add(0xFFFF);
+                    }
+                }
+            }
+            else
+            {
+                throw new Exception("tri_list to tri_strip vertIndices conversion failed! Possibly non-manifold vertex detected, please try reexporting the dae file inside a 3D model program.");
+            }
+
+            sr.Close();
+
+            foreach (int face in triStripPrimitives)
+                poly.WriteShort(face);
+        }
+
+        public void CopyScrpitExeToHelperFolder()
+        {
+            // 获取当前执行目录
+            string currentDirectory = AppDomain.CurrentDomain.BaseDirectory;
+
+            // 计算项目根目录
+            string projectRoot = Path.GetFullPath(Path.Combine(currentDirectory, @"..\.."));
+
+            // 生成源文件路径，指向项目根目录下的 Helpers 文件夹
+            string sourcePath = Path.Combine(projectRoot, "Helpers", "Strips.exe");
+
+            // 自动检测当前的构建配置
+            string buildConfiguration = ConfigurationManager.AppSettings["BuildConfiguration"] ?? "Debug"; // 默认值为 Debug
+            string targetPath = Path.Combine("Helpers/Strips.exe");
+
+            // 确保目标目录存在，如果不存在则创建
+            string directoryPath = Path.GetDirectoryName(targetPath);
+            if (!Directory.Exists(directoryPath))
+            {
+                Directory.CreateDirectory(directoryPath);
+            }
+
+            // 复制文件
+            File.Copy(sourcePath, targetPath, true);
+        }
+        
+        public void CreateInputPrimitiveTriangles(Polygon p)
+        {
+            // 生成文件路径
+            string inputPrimitiveTrianglesPath = Path.Combine("Helpers", "inputPrimitiveTriangles.txt");
+
+            // 确保目录存在，如果不存在则创建
+            string directoryPath = Path.GetDirectoryName(inputPrimitiveTrianglesPath);
+            if (!Directory.Exists(directoryPath))
+            {
+                Directory.CreateDirectory(directoryPath);
+            }
+
+            // 写入内容到文本文件
+            StringBuilder lineStr = new StringBuilder();
+            StringBuilder baseStr = new StringBuilder();
+            int count = 1;
+
+            foreach (uint value in p.vertexIndices)
+            {
+                if (value > 0xFFFF)
+                    throw new Exception("Debug");
+
+                if (count <= 3)
+                {
+                    lineStr.Append(value);
+                    lineStr.Append(" ");
+                }
+                else
+                {
+                    count = 1;
+                    baseStr.AppendLine(lineStr.ToString());
+                    lineStr = new StringBuilder();
+                    lineStr.Append(value);
+                    lineStr.Append(" ");
+                }
+                count++;
+            }
+
+            baseStr.AppendLine(lineStr.ToString());
+
+            // 检查文件是否存在，如果不存在则创建并写入内容
+            using (TextWriter writer = new StreamWriter(inputPrimitiveTrianglesPath, false))
+            {
+                writer.Write(baseStr.ToString());
+            }
         }
     }
 }
